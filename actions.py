@@ -7,11 +7,13 @@ from rq import Queue
 from datetime import timedelta
 from durations import Duration
 
+def isUserBlacklisted(user):
+	return user in config.TARGET_USER_BLACLIST
+
 def processGlobalComment(comment):
-	logging.info("Processing comment: %s" % comment.body)
+	# logging.info("Processing comment: %s" % comment.body)
 	commentBody = comment.body
 	commentBody = utils.markdownToText(commentBody)
-	print("Processing comment: %s" % commentBody)
 	match = re.search(r"(u\/({botname}|nwordcountbot)) ?(u\/[a-zA-Z-_]{{1,100}})? ?(.*){{1,100}}?".format(botname=config.BOTNAME), commentBody)
 
 	if match and match.group(1):
@@ -28,6 +30,9 @@ def processSummoning(comment, targetUser, targetWords):
 
 	if hasTargetUser:
 		targetUser = targetUser[2:]
+		if isUserBlacklisted(targetUser):
+			print("Skipping blacklisted user %s" % targetUser)
+			return
 		print("Analyzing user %s for word(s) %s " % (targetUser, ', '.join(targetWords)))
 		count = analyzeComments(targetUser, targetWords)
 		replyToComment(comment, targetUser, targetWords, count)
@@ -43,7 +48,7 @@ def analyzeComments(targetUser, targetWords):
 	return totalMatches
 
 def replyToComment(comment, targetUser, targetWords, count):
-	replyText = utils.counterReplyComment(targetUser, count, targetWords);
+	replyText = utils.buildCounterReplyComment(targetUser, count, targetWords);
 	print("Will try to comment to reply with %s " % replyText)
 	try:
 		comment.reply(replyText)

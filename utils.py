@@ -5,7 +5,7 @@ from functools import reduce
 from bs4 import BeautifulSoup
 from markdown import markdown
 
-def counterReplyComment(user, count, words):
+def buildCounterReplyComment(user, count, words):
 	words = list(map(lambda w: censor(w), words))
 	words = words[0] if len(words) == 1 else ", ".join(words)
 
