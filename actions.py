@@ -39,12 +39,11 @@ def processSummoning(comment, targetUser, targetWords):
 
 def analyzeComments(targetUser, targetWords):
 	totalMatches = 0
-	for word in targetWords:
-		results = list(config.api.search_comments(author=targetUser, filter=['body'], size=500))
-		for comment in results:
-			commentBody = comment.body
-			pattern = r"({q})".format(q=word)
-			totalMatches += len(re.findall(pattern, commentBody.lower()))
+	results = list(config.api.search_comments(author=targetUser, filter=['body'], size=500))
+	for comment in results:
+		commentBody = comment.body
+		pattern = r"({q})".format(q='|'.join(targetWords))
+		totalMatches += len(re.findall(pattern, commentBody.lower()))
 	return totalMatches
 
 def replyToComment(comment, targetUser, targetWords, count):
