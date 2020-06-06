@@ -8,24 +8,27 @@ from datetime import timedelta
 from durations import Duration
 
 def isUserBlacklisted(user):
-	return user in config.TARGET_USER_BLACLIST
+	return user in config.TARGET_USER_BLACKLIST
+
+def processSummoningById(commentId):
+	processGlobalComment(config.reddit.comment(id=commentId))	
 
 def processGlobalComment(comment):
 	# logging.info("Processing comment: %s" % comment.body)
 	commentBody = comment.body
 	commentBody = utils.markdownToText(commentBody)
-	match = re.search(r"(u\/({botname}|nwordcountbot)) ?(u\/[a-zA-Z-_]{{1,100}})? ?(.*){{1,100}}?".format(botname=config.BOTNAME), commentBody)
+	match = re.search(r"(u\/({botname}|nwordcountbot)) ?(u\/[a-zA-Z0-9-_]{{1,100}})? ?(.*){{1,100}}?".format(botname=config.BOTNAME), commentBody)
 
 	if match and match.group(1):
 		queue = Queue(connection=utils.redis())
-		queue.enqueue(processSummoning, comment, match.group(3), match.group(4))
+		queue.enqueue(processSummoning, comment, "nword" in match.group(1), match.group(3), match.group(4))
 	else:
 		logging.info("No match for comment %s" % comment.body)
 
-def processSummoning(comment, targetUser, targetWords):
-	logging.info("Processing summoning %s" % comment.body)
+def processSummoning(comment, isNwords, targetUser, targetWords):
+	print("Processing summoning %s" % comment.body)
 	targetUser = targetUser or "u/%s" % comment.parent().author
-	targetWords = targetWords.split() or config.DEFAULT_TARGET_WORDS
+	targetWords = config.N_WORDS if isNwords else (targetWords.split() or config.DEFAULT_TARGET_WORDS)
 	hasTargetUser = not (targetUser is None)
 
 	if hasTargetUser:
@@ -54,8 +57,11 @@ def replyToComment(comment, targetUser, targetWords, count):
 	except praw.exceptions.RedditAPIException as e:
 		for error in e.items:
 			match = re.search(r"(try again in )([0-9a-zA-z ]{1,15})\.", error.message)
-			if match.group(2):
+			if match and match.group(2):
 				duration = Duration(match.group(2)).to_seconds()
 				print("Couldn't reply because of rate limit so scheduled it to reply in %d seconds" % duration)
 				queue = Queue(connection=utils.redis())
 				queue.enqueue_in(timedelta(seconds=duration), replyToComment, comment, targetUser, targetWords, count)
+			else:
+				# todo: maybe send it to the author of the comment?
+				print("Couldn't recover from error: %s " % error.message)
