@@ -1,0 +1,12 @@
+[DEFAULT]
+check_for_updates=True
+
+oauth_url=https://oauth.reddit.com
+reddit_url=https://www.reddit.com
+short_url=https://redd.it
+
+[wordscounterbot]
+client_id=appid
+client_secret=appsecret
+password=userpass
+username=username
