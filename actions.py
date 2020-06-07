@@ -12,7 +12,6 @@ def isUserBlacklisted(user):
 	return user in config.TARGET_USER_BLACKLIST
 
 def processGlobalComment(comment):
-	# logging.info("Processing comment: %s" % comment.body)
 	commentBody = comment.body
 	commentBody = utils.markdownToText(commentBody)
 	match = re.search(r"(u\/({botname}|nwordcountbot)) ?(u\/[a-zA-Z0-9-_]{{1,100}})? ?(.*){{1,100}}?".format(botname=config.BOTNAME), commentBody)
@@ -21,10 +20,10 @@ def processGlobalComment(comment):
 		thread = threading.Thread(target=processSummoning, args=[comment, ("nword" in match.group(1)), match.group(3), match.group(4)])
 		thread.start()
 	else:
-		logging.info("No match for comment %s" % comment.body)
+		print("No match for comment %s" % utils.linkify(comment))
 
 def processSummoning(comment, isNwords, targetUser, targetWords):
-	print("Processing summoning %s" % comment.body)
+	print("Processing summoning by '%s': %s" % (comment.author, comment.body))
 	targetUser = targetUser or "u/%s" % comment.parent().author
 	targetWords = config.N_WORDS if isNwords else (targetWords.split() or config.DEFAULT_TARGET_WORDS)
 	hasTargetUser = not (targetUser is None)
@@ -35,17 +34,24 @@ def processSummoning(comment, isNwords, targetUser, targetWords):
 			print("Skipping blacklisted user %s" % targetUser)
 			return
 		print("Analyzing user %s for word(s) %s " % (targetUser, ', '.join(targetWords)))
-		count = analyzeComments(targetUser, targetWords)
+		count = analyzeUser(targetUser, targetWords)
 		replyToComment(comment, targetUser, targetWords, count)
 
-def analyzeComments(targetUser, targetWords):
+def analyzeUser(targetUser, targetWords):
+	submissions = list(config.api.search_submissions(author=targetUser, filter=['selftext', 'title'], size=500))
+	comments = list(config.api.search_comments(author=targetUser, filter=['body'], size=500))
+	
 	totalMatches = 0
-	results = list(config.api.search_comments(author=targetUser, filter=['body'], size=500))
-	for comment in results:
-		commentBody = comment.body
-		pattern = r"({q})".format(q='|'.join(targetWords))
-		totalMatches += len(re.findall(pattern, commentBody.lower()))
+	for s in submissions:
+		totalMatches += countTextForWords(targetWords, s.selftext) + countTextForWords(targetWords, s.title)
+	for c in comments:
+		totalMatches += countTextForWords(targetWords, c.body)
+
 	return totalMatches
+
+def countTextForWords(words, text):
+	pattern = r"({q})".format(q='|'.join(words))
+	return len(re.findall(pattern, text.lower()))
 
 def replyToComment(comment, targetUser, targetWords, count):
 	replyText = utils.buildCounterReplyComment(targetUser, count, targetWords);
@@ -69,18 +75,16 @@ def processComment(comment):
 	alreadyReplied = False
 	for c in comment.replies:
 		if c.author == config.BOTNAME:
+			print('Already replied to comment %s with comment %s' % (comment.id, utils.linkify(c)))
 			alreadyReplied = True
 			break
 	if not alreadyReplied:
-		print("Will process comment: %s" % comment.body)
-		processGlobalComment(comment)	
+		print("Will process comment by '%s': %s" % (comment.author, comment.body))
+		processGlobalComment(comment)
+		return True
 	else:
-		print("Skipping already processed comment: %s" % comment.body)
+		print("Skipping already processed comment by '%s': %s" % (comment.author, comment.body))
+		return False
 
 def processCommentById(commentId):
 	return processComment(config.reddit.comment(id=commentId))
-
-def processRecentNwordCalls():
-	comments = list(config.api.search_comments(q="nwordcountbot", filter=['body', 'replies'], limit=500))
-	for c in comments:
-		processComment(c)

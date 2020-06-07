@@ -19,3 +19,6 @@ def censor(s):
 
 def markdownToText(text):
 	return ''.join(BeautifulSoup(markdown(text), "html.parser").findAll(text=True))
+
+def linkify(c):
+	return 'https://reddit.com/'+c.permalink
