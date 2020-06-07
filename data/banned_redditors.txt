@@ -1,0 +1,3 @@
+AutoModerator
+None
+N_word_pass_enabled

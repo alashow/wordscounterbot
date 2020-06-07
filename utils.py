@@ -1,5 +1,6 @@
 import config
 import logging
+from datetime import timedelta
 from redis import StrictRedis
 from functools import reduce
 from bs4 import BeautifulSoup
@@ -29,3 +30,21 @@ def markdownToText(text):
 
 def linkify(c):
 	return 'https://reddit.com'+c.permalink
+
+# https://dev.to/astagi/rate-limiting-using-python-and-redis-58gk
+def rateLimit(key: str, limit: int, period: timedelta):
+	r = redis()
+	period_in_seconds = int(period.total_seconds())
+	t = r.time()[0]
+	separation = round(period_in_seconds / limit)
+	r.setnx(key, 0)
+	try:
+		with r.lock('lock:' + key, blocking_timeout=5) as lock:
+			tat = max(int(r.get(key)), t)
+			if tat - t <= period_in_seconds - separation:
+				new_tat = max(tat, t) + separation
+				r.set(key, new_tat)
+				return False
+			return True
+	except LockError:
+		return True

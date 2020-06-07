@@ -2,9 +2,9 @@ import config
 from actions import processComment
 import time
 
-sleepSecondsBetweenChecks = 120 # 2 min
+sleepSecondsBetweenChecks = 30
 
-def processRecentNwordCalls(max_skips=5):
+def processRecentNwordCalls(max_skips=2):
 	print('Getting recent nwordcountbot calls')
 	comments = list(config.apiReddit.search_comments(q="nwordcountbot", filter=['body', 'replies'], limit=500))
 	skipped = 0

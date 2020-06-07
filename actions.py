@@ -19,8 +19,6 @@ def processGlobalComment(comment):
 	if match and match.group(1):
 		thread = threading.Thread(target=processSummoning, args=[comment, ("nword" in match.group(1)), match.group(3), match.group(4)])
 		thread.start()
-	else:
-		print("No match for comment %s" % utils.linkify(comment))
 
 def processSummoning(comment, isNwords, targetUser, targetWords):
 	print("Processing summoning by '%s': %s" % (comment.author, comment.body))
@@ -38,17 +36,18 @@ def processSummoning(comment, isNwords, targetUser, targetWords):
 		replyToComment(comment, targetUser, targetWords, count, countNR)
 
 def analyzeUser(targetUser, targetWords):
-	submissions = list(config.api.search_submissions(author=targetUser, filter=['selftext', 'title'], size=500))
-	comments = list(config.api.search_comments(author=targetUser, filter=['body'], size=500))
+	submissions = list(config.api.search_submissions(author=targetUser, filter=['selftext', 'title', 'id'], size=500))
+	recentComments = list(config.reddit.redditor(targetUser).comments.new())
+	comments = list(config.api.search_comments(author=targetUser, filter=['body'], before=int(recentComments[-1].created_utc), size=500))
 	isNwords = targetWords == config.N_WORDS
 	
 	totalMatches = 0
 	totalNRMatches = 0
 	for s in submissions:
-		totalMatches += countTextForWords(targetWords, s.selftext) + countTextForWords(targetWords, s.title)
+		totalMatches += countTextForWords(targetWords, s.title) + countTextForWords(targetWords, s.selftext) if(hasattr(s, 'selftext')) else 0
 		if isNwords:
-			totalNRMatches += countTextForWords(targetWords[1:], s.selftext) + countTextForWords(targetWords[1:], s.title)
-	for c in comments:
+			totalNRMatches += countTextForWords(targetWords[1:], s.title) + countTextForWords(targetWords[1:], s.selftext) if(hasattr(s, 'selftext')) else 0
+	for c in (recentComments+comments):
 		totalMatches += countTextForWords(targetWords, c.body)
 		if isNwords:
 			totalNRMatches += countTextForWords(targetWords[1:], c.body)
@@ -72,7 +71,7 @@ def replyToComment(comment, targetUser, targetWords, count, countNR):
 				duration = Duration(match.group(2)).to_seconds()
 				print("Couldn't reply because of rate limit so scheduled it to reply in %d seconds" % duration)
 				queue = Queue(connection=utils.redis())
-				queue.enqueue_in(timedelta(seconds=duration), replyToComment, comment, targetUser, targetWords, count)
+				queue.enqueue_in(timedelta(seconds=duration), replyToComment, comment, targetUser, targetWords, count, countNR)
 			else:
 				# todo: maybe send it to the author of the comment?
 				print("Couldn't recover from error: %s " % error.message)

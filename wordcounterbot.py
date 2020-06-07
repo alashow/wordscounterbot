@@ -14,6 +14,6 @@ import threading
 #     logger.setLevel(logging.DEBUG)
 #     logger.addHandler(handler)
 
-pool = ThreadPoolExecutor(max_workers=10)
+pool = ThreadPoolExecutor(max_workers=100)
 for comment in config.sub.stream.comments(skip_existing=False):
 	pool.submit(actions.processGlobalComment, (comment))
