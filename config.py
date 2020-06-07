@@ -21,6 +21,12 @@ DEFAULT_TARGET_WORDS=N_WORDS
 TARGET_USER_BLACKLIST=["AutoModerator", "None"]
 CENSOR_WORDS_MAP = ('nigga', 'n-word'), ('nigger', 'n-word-R')
 COUNTER_REPLY_TEMPLATE="Hey, I've searched u/{user}'s history and found **{count}** matches for word(s) '{words}'"
+COUNTER_REPLY_TEMPLATE_NWORD="""Thank you for the request, comrade.
+
+I have looked through u/{user}'s posting history and found {count} N-words, of which {countNR} were hard-Rs."""
+COUNTER_REPLY_TEMPLATE_NWORD_NONE= """Thank you for the request, comrade.
+
+u/{user} has not said the N-word yet."""
 
 reddit = praw.Reddit(BOTNAME, user_agent=USER_AGENT)
 sub = reddit.subreddit(SUBREDDIT)

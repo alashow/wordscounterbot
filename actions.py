@@ -34,30 +34,37 @@ def processSummoning(comment, isNwords, targetUser, targetWords):
 			print("Skipping blacklisted user %s" % targetUser)
 			return
 		print("Analyzing user %s for word(s) %s " % (targetUser, ', '.join(targetWords)))
-		count = analyzeUser(targetUser, targetWords)
-		replyToComment(comment, targetUser, targetWords, count)
+		count, countNR = analyzeUser(targetUser, targetWords)
+		replyToComment(comment, targetUser, targetWords, count, countNR)
 
 def analyzeUser(targetUser, targetWords):
 	submissions = list(config.api.search_submissions(author=targetUser, filter=['selftext', 'title'], size=500))
 	comments = list(config.api.search_comments(author=targetUser, filter=['body'], size=500))
+	isNwords = targetWords == config.N_WORDS
 	
 	totalMatches = 0
+	totalNRMatches = 0
 	for s in submissions:
 		totalMatches += countTextForWords(targetWords, s.selftext) + countTextForWords(targetWords, s.title)
+		if isNwords:
+			totalNRMatches += countTextForWords(targetWords[1:], s.selftext) + countTextForWords(targetWords[1:], s.title)
 	for c in comments:
 		totalMatches += countTextForWords(targetWords, c.body)
+		if isNwords:
+			totalNRMatches += countTextForWords(targetWords[1:], c.body)
 
-	return totalMatches
+	return totalMatches, totalNRMatches
 
 def countTextForWords(words, text):
 	pattern = r"({q})".format(q='|'.join(words))
 	return len(re.findall(pattern, text.lower()))
 
-def replyToComment(comment, targetUser, targetWords, count):
-	replyText = utils.buildCounterReplyComment(targetUser, count, targetWords);
-	print("Will try to comment to reply with %s " % replyText)
+def replyToComment(comment, targetUser, targetWords, count, countNR):
+	replyText = utils.buildCounterReplyComment(targetUser, targetWords, count, countNR);
+	print("Will try to comment to reply with: %s " % replyText)
 	try:
-		comment.reply(replyText)
+		reply = comment.reply(replyText)
+		print("Successfully replied: %s" % utils.linkify(reply))
 	except praw.exceptions.RedditAPIException as e:
 		for error in e.items:
 			match = re.search(r"(try again in )([0-9a-zA-z ]{1,15})\.", error.message)
@@ -86,5 +93,8 @@ def processComment(comment):
 		print("Skipping already processed comment by '%s': %s" % (comment.author, comment.body))
 		return False
 
-def processCommentById(commentId):
-	return processComment(config.reddit.comment(id=commentId))
+def processCommentById(id):
+	return processComment(getCommentById(id))
+
+def getCommentById(id):
+	return config.reddit.comment(id=id)
