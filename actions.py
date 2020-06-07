@@ -6,12 +6,10 @@ import praw
 from rq import Queue
 from datetime import timedelta
 from durations import Duration
+import threading
 
 def isUserBlacklisted(user):
 	return user in config.TARGET_USER_BLACKLIST
-
-def processSummoningById(commentId):
-	processGlobalComment(config.reddit.comment(id=commentId))	
 
 def processGlobalComment(comment):
 	# logging.info("Processing comment: %s" % comment.body)
@@ -20,8 +18,8 @@ def processGlobalComment(comment):
 	match = re.search(r"(u\/({botname}|nwordcountbot)) ?(u\/[a-zA-Z0-9-_]{{1,100}})? ?(.*){{1,100}}?".format(botname=config.BOTNAME), commentBody)
 
 	if match and match.group(1):
-		queue = Queue(connection=utils.redis())
-		queue.enqueue(processSummoning, comment, "nword" in match.group(1), match.group(3), match.group(4))
+		thread = threading.Thread(target=processSummoning, args=[comment, ("nword" in match.group(1)), match.group(3), match.group(4)])
+		thread.start()
 	else:
 		logging.info("No match for comment %s" % comment.body)
 
@@ -65,3 +63,24 @@ def replyToComment(comment, targetUser, targetWords, count):
 			else:
 				# todo: maybe send it to the author of the comment?
 				print("Couldn't recover from error: %s " % error.message)
+
+def processComment(comment):
+	comment.refresh()
+	alreadyReplied = False
+	for c in comment.replies:
+		if c.author == config.BOTNAME:
+			alreadyReplied = True
+			break
+	if not alreadyReplied:
+		print("Will process comment: %s" % comment.body)
+		processGlobalComment(comment)	
+	else:
+		print("Skipping already processed comment: %s" % comment.body)
+
+def processCommentById(commentId):
+	return processComment(config.reddit.comment(id=commentId))
+
+def processRecentNwordCalls():
+	comments = list(config.api.search_comments(q="nwordcountbot", filter=['body', 'replies'], limit=500))
+	for c in comments:
+		processComment(c)
