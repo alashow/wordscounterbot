@@ -1,5 +1,4 @@
 import utils
-
 import config
 import utils
 from classes.queue import Queue

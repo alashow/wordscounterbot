@@ -8,6 +8,7 @@ from markdown import markdown
 import threading
 import pytz
 from datetime import datetime
+import random
 
 def buildCounterReply(user, words, count, countNR):
 	isNwords = words == config.N_WORDS
@@ -32,7 +33,19 @@ def markdownToText(text):
 	return ''.join(BeautifulSoup(markdown(text), "html.parser").findAll(text=True))
 
 def linkify(c):
-	return 'https://reddit.com'+c.permalink
+	return "https://reddit.com" + (c.permalink if(hasattr(c, 'permalink')) else c)
+
+def prettyLinks(links, maxLength=5000):
+	if maxLength > 0:
+		random.shuffle(links)
+	text = 'Links:'
+	for i, link in enumerate(links):
+		if len(text) > maxLength:
+			break
+		text += f"""
+
+{i}: {link}"""
+	return text
 
 # https://dev.to/astagi/rate-limiting-using-python-and-redis-58gk
 def rateLimit(key: str, limit: int, period: timedelta):
@@ -71,7 +84,6 @@ def datetime_now():
 
 def datetime_from_timestamp(timestamp):
 	return datetime_force_utc(datetime.utcfromtimestamp(timestamp))
-
 
 def get_datetime_string(date_time, convert_utc=True, format_string="%Y-%m-%d %H:%M:%S"):
 	if date_time is None:

@@ -26,12 +26,11 @@ COUNTER_REPLY_TEMPLATE_NWORD="""Thank you for the request, comrade.
 I have looked through u/{user}'s posting history and found {count} N-words, of which {countNR} were hard-Rs."""
 COUNTER_REPLY_TEMPLATE_NWORD_NONE= """Thank you for the request, comrade.
 
-u/{user} has not said the N-word yet."""
+u/{user} has not said the N-word."""
 
 TARGET_USER_BLACKLIST=open('data/banned_redditors.txt').read().split('\n')
 
-COMMAND_PATTERN = r"(u\/({bot}|nwordcountbot)) ?(u\/[a-zA-Z0-9-_]{{1,100}})? ?(\'(.*){{1,100}}\')?".format(bot=BOTNAME)
-COMMAND_PATTERN = r"(\/?u\/({bot}|nwordcountbot)) ?(\/?u\/([a-zA-Z0-9-_]{{1,100}}))? ?(\'((.*){{1,100}})\')?".format(bot=BOTNAME)
+COMMAND_PATTERN = r"(\/?u\/({bot}|nwordcountbot)) ?(\/?u\/([a-zA-Z0-9-_]{{1,100}}))? ?(\'(.*){{1,100}}\')? ?(with links)?".format(bot=BOTNAME)
 
 reddit = praw.Reddit(BOTNAME, user_agent=USER_AGENT)
 sub = reddit.subreddit(SUBREDDIT)
