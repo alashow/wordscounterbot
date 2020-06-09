@@ -5,6 +5,9 @@ from redis import StrictRedis
 from functools import reduce
 from bs4 import BeautifulSoup
 from markdown import markdown
+import threading
+import pytz
+from datetime import datetime
 
 def buildCounterReplyComment(user, words, count, countNR):
 	isNwords = words == config.N_WORDS
@@ -48,3 +51,45 @@ def rateLimit(key: str, limit: int, period: timedelta):
 			return True
 	except LockError:
 		return True
+
+def background(f):
+    def wrapper(*a, **kw):
+        threading.Thread(target=f, args=a, kwargs=kw).start()
+    return wrapper
+
+def datetime_force_utc(date_time):
+	return pytz.utc.localize(date_time)
+
+def datetime_as_utc(date_time):
+	return date_time.astimezone(pytz.utc)
+
+def datetime_from_timestamp(timestamp):
+	return datetime_force_utc(datetime.utcfromtimestamp(timestamp))
+
+def datetime_now():
+	return datetime_force_utc(datetime.utcnow().replace(microsecond=0))
+
+def datetime_from_timestamp(timestamp):
+	return datetime_force_utc(datetime.utcfromtimestamp(timestamp))
+
+
+def get_datetime_string(date_time, convert_utc=True, format_string="%Y-%m-%d %H:%M:%S"):
+	if date_time is None:
+		return ""
+	if convert_utc:
+		date_time = datetime_as_utc(date_time)
+	return date_time.strftime(format_string)
+
+def parse_datetime_string(date_time_string, force_utc=True, format_string="%Y-%m-%d %H:%M:%S"):
+	if date_time_string is None or date_time_string == "None" or date_time_string == "":
+		return None
+	date_time = datetime.strptime(date_time_string, format_string)
+	if force_utc:
+		date_time = datetime_force_utc(date_time)
+	return date_time
+
+def get_last_seen(keyword):
+	return datetime_from_timestamp(config.state.get(f"last_seen_{keyword}") or 0)
+
+def set_last_seen(keyword, seen):
+	config.state.set(f"last_seen_{keyword}", seen)

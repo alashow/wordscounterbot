@@ -1,4 +1,8 @@
 praw.ini
+deploy.sh
+
+data/stats.db
+data/app.db
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

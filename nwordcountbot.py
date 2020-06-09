@@ -1,21 +1,29 @@
 import config
-from actions import processComment
-import time
+import re
+import actions
+from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import utils
+from reddit_utils import RedditKeywordWatcher
 
-sleepSecondsBetweenChecks = 30
+# import logging
 
-def processRecentNwordCalls(max_skips=2):
-	print('Getting recent nwordcountbot calls')
-	comments = list(config.apiReddit.search_comments(q="nwordcountbot", filter=['body', 'replies'], limit=500))
-	skipped = 0
-	for c in comments:
-		if not processComment(c):
-			skipped += 1
-		if skipped > max_skips:
-			print('Reached max skips of processing recent comments.')
-			break
+# handler = logging.StreamHandler()
+# handler.setLevel(logging.DEBUG)
+# for logger_name in ("praw", "prawcore"):
+#     logger = logging.getLogger(logger_name)
+#     logger.setLevel(logging.DEBUG)
+#     logger.addHandler(handler)
+
+pool = ThreadPoolExecutor(max_workers=100)
+
+botname = "nwordcountbot"
+watcher = RedditKeywordWatcher(botname)
 
 while True:
-	processRecentNwordCalls()
-	print('Sleeping for %d seconds before next check' % (sleepSecondsBetweenChecks))
-	time.sleep(sleepSecondsBetweenChecks)
+	for c in watcher.get():
+		id = c['id']
+		pool.submit(actions.processCommentById, (id))
+		watcher.set_processed(id)
+		utils.set_last_seen(botname, c['created_utc'])

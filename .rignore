@@ -1,0 +1,12 @@
+deploy.sh
+
+data/stats.db
+data/app.db
+
+.env
+.git*
+.rignore
+
+.DS_Store
+LICENSE
+readme.md
