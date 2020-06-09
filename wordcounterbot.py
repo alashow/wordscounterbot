@@ -8,6 +8,7 @@ from datetime import datetime
 import utils
 import logging
 import time
+from praw.models import Comment
 
 handler = logging.StreamHandler()
 # logging.basicConfig(level=logging.DEBUG)
@@ -18,28 +19,36 @@ def initStreamListener(workers=100):
 	for comment in config.sub.stream.comments(skip_existing=False):
 		pool.submit(actions.processComment, (comment))
 
-def initMentionsListener(workers=10):
-	lastSeenKey = "mentions"
+def checkUnreadMessages(workers=10):
+	lastSeenKey = "messages"
 	lastSeen = utils.get_last_seen(lastSeenKey)
+	lastMessageAt = utils.get_last_seen(lastSeenKey, True);
 	
+	inbox = config.reddit.inbox
 	pool = ThreadPoolExecutor(max_workers=workers)
-	mentions = list(config.reddit.inbox.mentions(limit=25))
+	messages = list(inbox.unread(limit=25))
 
-	utils.set_last_seen(lastSeenKey, mentions[0].created_utc)
+	for item in messages:
+		isComment = isinstance(item, Comment)
 
-	for comment in mentions:
-		createdAt = comment.created_utc
-		print(comment.author)
+		createdAt = item.created_utc
 		if lastSeen >= utils.datetime_from_timestamp(createdAt):
 			break;
+
+		if createdAt > lastMessageAt:
+			print(f"Found new last message: {utils.datetime_from_timestamp(createdAt)}")
+			lastMessageAt = createdAt;
 		
-		print(f"Processing mention by u/{comment.author}: {comment.body}, {createdAt}")
-		if comment.new:
-			pool.submit(comment.mark_read)
-			pool.submit(actions.processComment, (comment))
+		print(f"Processing message by u/{item.author}: {item.body}, {createdAt}")
+		if item.new:
+			pool.submit(actions.processComment if isComment else actions.processMessage, (item))
+	
+	if messages:
+		utils.set_last_seen(lastSeenKey, lastMessageAt)
+		inbox.mark_read(messages)
 
 initStreamListener()
 
 while True:
-	initMentionsListener()
-	time.sleep(1)
+	checkUnreadMessages()
+	time.sleep(5)

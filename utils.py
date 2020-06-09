@@ -9,7 +9,7 @@ import threading
 import pytz
 from datetime import datetime
 
-def buildCounterReplyComment(user, words, count, countNR):
+def buildCounterReply(user, words, count, countNR):
 	isNwords = words == config.N_WORDS
 	words = list(map(lambda w: censor(w), words))
 	words = words[0] if len(words) == 1 else ", ".join(words)
@@ -88,8 +88,9 @@ def parse_datetime_string(date_time_string, force_utc=True, format_string="%Y-%m
 		date_time = datetime_force_utc(date_time)
 	return date_time
 
-def get_last_seen(keyword):
-	return datetime_from_timestamp(config.state.get(f"last_seen_{keyword}") or 0)
+def get_last_seen(keyword, raw=False):
+	lastSeen = config.state.get(f"last_seen_{keyword}") or 0
+	return lastSeen if raw else datetime_from_timestamp(lastSeen)
 
 def set_last_seen(keyword, seen):
 	config.state.set(f"last_seen_{keyword}", seen)

@@ -30,6 +30,9 @@ u/{user} has not said the N-word yet."""
 
 TARGET_USER_BLACKLIST=open('data/banned_redditors.txt').read().split('\n')
 
+COMMAND_PATTERN = r"(u\/({bot}|nwordcountbot)) ?(u\/[a-zA-Z0-9-_]{{1,100}})? ?(\'(.*){{1,100}}\')?".format(bot=BOTNAME)
+COMMAND_PATTERN = r"(\/?u\/({bot}|nwordcountbot)) ?(\/?u\/([a-zA-Z0-9-_]{{1,100}}))? ?(\'((.*){{1,100}})\')?".format(bot=BOTNAME)
+
 reddit = praw.Reddit(BOTNAME, user_agent=USER_AGENT)
 sub = reddit.subreddit(SUBREDDIT)
 api = PushshiftAPI()
