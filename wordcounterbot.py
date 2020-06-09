@@ -29,6 +29,7 @@ def initMentionsListener(workers=10):
 
 	for comment in mentions:
 		createdAt = comment.created_utc
+		print(comment.author)
 		if lastSeen >= utils.datetime_from_timestamp(createdAt):
 			break;
 		

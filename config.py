@@ -17,7 +17,7 @@ REDIS_HOST=env("REDIS_HOST", 'localhost')
 REDIS_PORT=env("REDIS_PORT", 6379)
 REDIS_PASSWORD=env("REDIS_PASSWORD", "")
 
-N_WORDS = ["nigga", "nigger"]
+N_WORDS = ["nigga", "niggas", "nigger", "niggers"]
 DEFAULT_TARGET_WORDS=N_WORDS
 CENSOR_WORDS_MAP = ('nigga', 'n-word'), ('nigger', 'n-word-R')
 COUNTER_REPLY_TEMPLATE="Hey, I've searched u/{user}'s history and found **{count}** matches for word(s): {words}"

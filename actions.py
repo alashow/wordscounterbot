@@ -57,18 +57,24 @@ def analyzeUser(targetUser, targetWords=config.N_WORDS, comment = None):
 	isNwords = targetWords == config.N_WORDS
 
 	submissions = getUserPosts(targetUser)
-	comments = getUserComments(targetUser)
+	recentComments = list(config.reddit.redditor(targetUser).comments.new())
+	comments = list(config.api.search_comments(author=targetUser, filter=['body'], before=int(recentComments[-1].created_utc), q="|".join(targetWords), size=1000))
 
 	totalMatches = 0
 	totalNRMatches = 0
+
 	for s in submissions:
 		totalMatches += countTextForWords(targetWords, s.title) + countTextForWords(targetWords, s.selftext) if(hasattr(s, 'selftext')) else 0
 		if isNwords:
 			totalNRMatches += countTextForWords(targetWords[1:], s.title) + countTextForWords(targetWords[1:], s.selftext) if(hasattr(s, 'selftext')) else 0
+	for c in recentComments:
+		totalMatches += countTextForWords(targetWords, c.body)
+		if isNwords:
+			totalNRMatches += countTextForWords(targetWords[2:], c.body)			
 	for c in comments:
 		totalMatches += countTextForWords(targetWords, c.body)
 		if isNwords:
-			totalNRMatches += countTextForWords(targetWords[1:], c.body)
+			totalNRMatches += countTextForWords(targetWords[2:], c.body)
 
 	return totalMatches, totalNRMatches
 
@@ -82,6 +88,9 @@ def replyToComment(comment, targetUser, targetWords, count, countNR):
 	replyText = utils.buildCounterReplyComment(targetUser, targetWords, count, countNR);
 	print("Will try to comment to reply with: %s " % replyText)
 	try:
+		post = comment.submission
+		if post and (post.locked or post.archived):
+			print("Post is locked or archived")
 		reply = comment.reply(replyText)
 		print(f"Successfully replied: {utils.linkify(reply)}")
 	except praw.exceptions.RedditAPIException as e:
@@ -94,7 +103,7 @@ def replyToComment(comment, targetUser, targetWords, count, countNR):
 				queue.enqueue_in(timedelta(seconds=duration), replyToComment, comment, targetUser, targetWords, count, countNR)
 	except Exception as e:
 		# todo: maybe send it to the author of the comment?
-		print(f"Couldn't recover from error: {error.message}")
+		print(f"Couldn't recover from error: {e}")
 
 def processCommentWithCheck(comment):
 	comment.refresh()
@@ -142,14 +151,13 @@ def getCommentById(id):
 	return config.reddit.comment(id=id)
 
 def getPostComments(post=None, id=None):
-	print(post)
 	post = post or config.reddit.submission(id=id)
 	post.comments.replace_more(limit=None)
 	return post.comments.list()
 
 def getUserComments(user, fields=['body']):
 	recentComments = list(config.reddit.redditor(user).comments.new())
-	comments = list(config.api.search_comments(author=user, filter=fields, before=int(recentComments[-1].created_utc), size=500))
+	comments = list(config.api.search_comments(author=user, filter=body, before=int(recentComments[-1].created_utc), size=1000))
 
 	return recentComments+comments
 

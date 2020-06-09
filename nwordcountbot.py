@@ -16,7 +16,7 @@ from reddit_utils import RedditKeywordWatcher
 #     logger.setLevel(logging.DEBUG)
 #     logger.addHandler(handler)
 
-pool = ThreadPoolExecutor(max_workers=100)
+pool = ThreadPoolExecutor(max_workers=20)
 
 botname = "nwordcountbot"
 watcher = RedditKeywordWatcher(botname)
