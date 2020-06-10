@@ -4,7 +4,7 @@ import utils
 import re
 import praw
 import threading 
-from rq import Queue
+from rq import Queue as RQ
 from datetime import datetime
 from datetime import timedelta
 from durations import Duration
@@ -15,7 +15,7 @@ from tqdm import tqdm
 from classes.queue import Queue
 
 def isUserBlacklisted(user):
-	return user in config.TARGET_USER_BLACKLIST
+	return user.lower() in config.TARGET_USER_BLACKLIST
 
 # returns False if no match or (botname, username, words, withLinks)
 def parseCommandText(body):
@@ -24,7 +24,6 @@ def parseCommandText(body):
 
 	if match and match.group(1):
 		words = match.group(5)
-		print(match.group())
 		words = config.DEFAULT_TARGET_WORDS if (words is None) else words[1:-1].split(',')
 		words = config.N_WORDS if "nword" in match.group(1) else words
 
@@ -35,7 +34,6 @@ def parseCommandText(body):
 def processComment(comment):
 	result = parseCommandText(comment.body)
 	if result:
-		print(result)
 		(bot, user, words, withLinks) = result
 		thread = threading.Thread(target=processSummoning, args=[comment, user, words, withLinks])
 		thread.start()
@@ -52,14 +50,14 @@ def processSummoning(comment, user, words, withLinks = False):
 	state.set(inflight, True)
 	print(f"Processing summoning by u/{comment.author}: {comment.body}")
 
-	user = user or comment.parent().author
+	user = user or comment.parent().author.name
 	if user:
 		if isUserBlacklisted(user):
 			print(f"Skipping blacklisted user {user}")
 			return
 
-		count, countNR, links = analyzeUser(user, words, comment, withLinks)
-		replyToComment(comment, user, words, count, countNR, links)
+		(count, countNR, links, cIds) = analyzeUser(user, words, comment, withLinks)
+		replyToComment(comment, user, words, count, countNR, links, cIds)
 
 	state.rem(inflight)
 
@@ -71,8 +69,8 @@ def processMessage(message):
 			if isUserBlacklisted(user):
 				print(f"Skipping blacklisted user {user}")
 				return
-			count, countNR, links = analyzeUser(user, words, withLinks = withLinks)
-			replyToMessage(message, user, words, count, countNR, links)
+			(count, countNR, links, cIds) = analyzeUser(user, words, withLinks = withLinks)
+			replyToMessage(message, user, words, count, countNR, links, cIds)
 		else:
 			logging.debug("Message didn't have a target body, skipping.")
 
@@ -80,10 +78,11 @@ def analyzeUser(user, words=config.N_WORDS, comment = None, withLinks = False):
 	print(f"Analyzing user u/{user} for word(s): {', '.join(words)}")
 
 	isNwords = words == config.N_WORDS
-	extraFields = ['permalink'] if withLinks else []
-	submissions = getUserPosts(user, extraFields=extraFields)
+	submissions = getUserPosts(user)
 	recentComments = list(config.reddit.redditor(user).comments.new())
-	comments = list(config.api.search_comments(author=user, filter=['body', 'id']+extraFields, q="|".join(words), size=1000))
+	comments = list(config.api.search_comments(author=user, filter=['body', 'id', 'permalink'], q="|".join(words), size=1000))
+
+	print(f"Found {len(comments)} comments for u/{user}")
 
 	totalMatches = 0
 	totalNRMatches = 0
@@ -95,32 +94,45 @@ def analyzeUser(user, words=config.N_WORDS, comment = None, withLinks = False):
 			links.append(s.permalink)
 		if isNwords:
 			totalNRMatches += countTextForWords(words[2:], s.title) + countTextForWords(words[2:], s.selftext) if(hasattr(s, 'selftext')) else 0
+	
 	processedComments = []
+	commentsWithoutLinks = []
+	commentIds = []
 	for c in (recentComments+comments):
 		if c.id in processedComments:
 			continue
 		processedComments.append(c.id)
 
-		count = countTextForWords(words, c.body)
+		count = countTextForWords(words, c.body) if(hasattr(c, 'body')) else 0
 		totalMatches += count
-		if withLinks and count > 0 and hasattr(c, 'permalink'):
-			links.append(c.permalink)
+		if count > 0:
+			commentIds.append(c.id)
+			if withLinks:
+				if hasattr(c, 'permalink'):
+					links.append(c.permalink)
 		if isNwords:
-			totalNRMatches += countTextForWords(words[2:], c.body)
+			totalNRMatches += countTextForWords(words[2:], c.body) if(hasattr(c, 'body')) else 0
 
-	logging.debug(f"Finished analyzing user u/{user}, results: {totalMatches}, {totalNRMatches}")
-	return totalMatches, totalNRMatches, list(map(lambda x: utils.linkify(x), links))
+	print(f"Finished analyzing user u/{user}, results: {totalMatches}, {totalNRMatches}")
+	
+	links = list(map(lambda x: utils.linkify(x), links))
+
+	return totalMatches, totalNRMatches, links, commentIds
 
 def countTextForWords(words, text):
 	pattern = r"({q})".format(q='|'.join(words))
 	return len(re.findall(pattern, text.lower()))
 
-def replyToComment(comment, user, words, count, countNR, links = []):
+def replyToComment(comment, user, words, count, countNR, links = [], commentIds = []):
 	saveCount(comment, user, words, count, countNR)
 
 	replyText = utils.buildCounterReply(user, words, count, countNR);
-	if links:
-		replyText += f"\n\n{utils.prettyLinks(links)}"
+	if commentIds or links:
+		replyText += f"\n\nLinks:"
+		if commentIds:
+			replyText += f"\n\n0: [Pushshift]({utils.apiCommentsJsonLink(commentIds)})"
+		if links:
+			replyText += f"\n\n{utils.prettyLinks(links)}"
 
 	print(f"Will try to comment to reply with: {replyText}")
 	try:
@@ -135,16 +147,20 @@ def replyToComment(comment, user, words, count, countNR, links = []):
 			if match and match.group(2):
 				duration = Duration(match.group(2)).to_seconds()
 				print(f"Couldn't reply because of rate limit so scheduled it to reply in {duration} seconds")
-				queue = Queue(connection=utils.redis())
-				queue.enqueue_in(timedelta(seconds=duration), replyToComment, comment, user, words, count, countNR)
+				rq = RQ(connection=utils.redis())
+				rq.enqueue_in(timedelta(seconds=duration), replyToComment, comment, user, words, count, countNR)
 	except Exception as e:
 		# todo: maybe send it to the author of the comment?
 		print(f"Couldn't recover from error: {e}")
 
-def replyToMessage(message, user, words, count, countNR, links = []):
+def replyToMessage(message, user, words, count, countNR, links = [], commentIds = []):
 	replyText = utils.buildCounterReply(user, words, count, countNR);
-	if links:
-		replyText += f"\n\n{utils.prettyLinks(links)}"
+	if commentIds or links:
+		replyText += f"\n\nLinks:"
+		if commentIds:
+			replyText += f"\n\n0: [Pushshift]({utils.apiCommentsJsonLink(commentIds)})"
+		if links:
+			replyText += f"\n\n{utils.prettyLinks(links)}"
 
 	print(f"Will try to message to u/{user} with: {replyText}")
 	try:
@@ -210,8 +226,8 @@ def getUserComments(user, fields=['body']):
 
 	return recentComments+comments
 
-def getUserPosts(user, fields=['id', 'title', 'selftext'], extraFields = []):
-	return list(config.api.search_submissions(author=user, filter=fields+extraFields, size=500))
+def getUserPosts(user, fields=['id', 'title', 'selftext', 'permalink']):
+	return list(config.api.search_submissions(author=user, filter=fields, size=500))
 
 def getSaveKey(user, words):
 	return f"{user}.{b64encode(str(words).encode('utf-8')).decode('utf-8')}"

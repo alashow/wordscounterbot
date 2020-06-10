@@ -1,5 +1,5 @@
-AutoModerator
-None
-N_word_pass_enabled
+automoderator
+none
+n_word_pass_enabled
 wordscounterbot
-RascalTech
+rascaltech

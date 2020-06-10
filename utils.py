@@ -35,16 +35,19 @@ def markdownToText(text):
 def linkify(c):
 	return "https://reddit.com" + (c.permalink if(hasattr(c, 'permalink')) else c)
 
-def prettyLinks(links, maxLength=5000):
+def apiCommentsJsonLink(ids):
+	return "http://api.pushshift.io/reddit/search/comment/?ids=" + ",".join(ids) 
+
+def prettyLinks(links, offset=1, maxLength=5000):
 	if maxLength > 0:
 		random.shuffle(links)
-	text = 'Links:'
+	text = ""
 	for i, link in enumerate(links):
 		if len(text) > maxLength:
 			break
 		text += f"""
 
-{i}: {link}"""
+{i+offset}: {link}"""
 	return text
 
 # https://dev.to/astagi/rate-limiting-using-python-and-redis-58gk

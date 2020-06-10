@@ -39,7 +39,7 @@ def checkUnreadMessages(workers=10):
 			print(f"Found new last message: {utils.datetime_from_timestamp(createdAt)}")
 			lastMessageAt = createdAt;
 		
-		print(f"Processing message by u/{item.author}: {item.body}, {createdAt}")
+		print(f"Processing message by u/{item.author}: {item.body}, at={createdAt}, comment={isComment}")
 		if item.new:
 			pool.submit(actions.processComment if isComment else actions.processMessage, (item))
 	
@@ -47,7 +47,10 @@ def checkUnreadMessages(workers=10):
 		utils.set_last_seen(lastSeenKey, lastMessageAt)
 		inbox.mark_read(messages)
 
-initStreamListener()
+try:
+	initStreamListener()
+except:
+	initStreamListener()
 
 while True:
 	checkUnreadMessages()
