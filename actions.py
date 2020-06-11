@@ -13,8 +13,11 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from classes.queue import Queue
 
-def isUserBlacklisted(user):
+def isTargetBlacklisted(user):
 	return user.lower() in config.TARGET_USER_BLACKLIST
+
+def isCallerBlacklisted(user):
+	return user.lower() in config.CALLER_USER_BLACKLIST
 
 # returns False if no match or (botname, username, words, withLinks)
 def parseCommandText(body):
@@ -37,11 +40,15 @@ def processComment(comment):
 
 	result = parseCommandText(comment.body)
 	if result:
-		(bot, user, words, withLinks) = result
-		thread = threading.Thread(target=processSummoning, args=[comment, user, words, withLinks])
+		thread = threading.Thread(target=processSummoning, args=[comment, *result])
 		thread.start()
 
-def processSummoning(comment, user, words, withLinks = False):
+def processSummoning(comment, bot, user, words, withLinks = False):
+	caller = comment.author.name
+	if isCallerBlacklisted(caller):
+		print(f"Skipping blacklisted caller user: u/{caller}")
+		return
+
 	state = config.redis
 	inflight = f"inflight_{comment.id}"
 
@@ -54,8 +61,16 @@ def processSummoning(comment, user, words, withLinks = False):
 
 	user = user or comment.parent().author.name
 	if user:
-		if isUserBlacklisted(user):
-			print(f"Skipping blacklisted user {user}")
+		if isTargetBlacklisted(user):
+			if user == bot and bot == config.BOTNAME:
+				try:
+					comment.reply(config.COUNTER_REPLY_NO_SNITCHING_ON_ME)
+					logging.debug("Sent no snitching on me reply.")
+				except Exception as e:
+					logging.debug(f"Couldn't send no snitching on me reply. Oh well. Error: {e}")
+
+			print(f"Skipping blacklisted target user: u/{user}")
+			state.delete(inflight)
 			return
 
 		(count, countNR, links, cIds) = analyzeUser(user, words, comment, withLinks)

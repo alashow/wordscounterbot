@@ -12,24 +12,26 @@ load_dotenv(find_dotenv())
 
 BOTNAME = 'wordscounterbot'
 SUBREDDIT = 'all'
-USER_AGENT = 'u/wordscounterbot. Contact me at /u/alashow or me@alashov.com'
+USER_AGENT = 'u/wordscounterbot. By /u/alashow, me@alashov.com'
 
 REDIS_HOST=env("REDIS_HOST", 'localhost')
 REDIS_PORT=env("REDIS_PORT", 6379)
 REDIS_PASSWORD=env("REDIS_PASSWORD", "")
 
 N_WORDS = ["nigga", "niggas", "nigger", "niggers"]
-DEFAULT_TARGET_WORDS=N_WORDS
+DEFAULT_TARGET_WORDS = N_WORDS
 CENSOR_WORDS_MAP = ('nigga', 'n-word'), ('nigger', 'n-word-R')
-COUNTER_REPLY_TEMPLATE="Hey, I've searched u/{user}'s history and found **{count}** matches for word(s): {words}"
-COUNTER_REPLY_TEMPLATE_NWORD="""Thank you for the request, comrade.
+COUNTER_REPLY_TEMPLATE = "Hey, I've searched u/{user}'s history and found **{count}** matches for word(s): {words}"
+COUNTER_REPLY_TEMPLATE_NWORD = """Thank you for the request, comrade.
 
 I have looked through u/{user}'s posting history and found {count} N-words, of which {countNR} were hard-Rs."""
-COUNTER_REPLY_TEMPLATE_NWORD_NONE= """Thank you for the request, comrade.
+COUNTER_REPLY_TEMPLATE_NWORD_NONE = """Thank you for the request, comrade.
 
 u/{user} has not said the N-word."""
+COUNTER_REPLY_NO_SNITCHING_ON_ME = """I ain't snitching on myself"""
 
-TARGET_USER_BLACKLIST=open('data/banned_redditors.txt').read().split('\n')
+TARGET_USER_BLACKLIST=open('data/banned_targets.txt').read().split('\n')
+CALLER_USER_BLACKLIST=open('data/banned_callers.txt').read().split('\n')
 
 COMMAND_PATTERN = r"(\/?u\/({bot}|nwordcountbot)) ?(\/?u\/([a-zA-Z0-9-_]{{1,100}}))? ?(\'(.*){{1,100}}\')? ?(with links)?".format(bot=BOTNAME)
 
