@@ -1,7 +1,6 @@
 import config
 import logging
 from datetime import timedelta
-from redis import StrictRedis
 from functools import reduce
 from bs4 import BeautifulSoup
 from markdown import markdown
@@ -23,9 +22,6 @@ def buildCounterReply(user, words, count, countNR):
 	else:
 		return config.COUNTER_REPLY_TEMPLATE.format(user=user, count=count, words=words)
 
-def redis():
-	return StrictRedis(host=config.REDIS_HOST, port=config.REDIS_PORT, password=config.REDIS_PASSWORD, db=0)
-
 def censor(s):
 	return reduce(lambda a, kv: a.replace(*kv), config.CENSOR_WORDS_MAP, s)
 
@@ -34,6 +30,9 @@ def markdownToText(text):
 
 def linkify(c):
 	return "https://reddit.com" + (c.permalink if(hasattr(c, 'permalink')) else c)
+
+def redditShortLink(id):
+	return f"https://redd.it/{id}"
 
 def apiCommentsJsonLink(ids):
 	return "http://api.pushshift.io/reddit/search/comment/?ids=" + ",".join(ids) 
@@ -52,7 +51,7 @@ def prettyLinks(links, offset=1, maxLength=5000):
 
 # https://dev.to/astagi/rate-limiting-using-python-and-redis-58gk
 def rateLimit(key: str, limit: int, period: timedelta):
-	r = redis()
+	r = config.redis
 	period_in_seconds = int(period.total_seconds())
 	t = r.time()[0]
 	separation = round(period_in_seconds / limit)
@@ -104,8 +103,14 @@ def parse_datetime_string(date_time_string, force_utc=True, format_string="%Y-%m
 	return date_time
 
 def get_last_seen(keyword, raw=False):
-	lastSeen = config.state.get(f"last_seen_{keyword}") or 0
+	lastSeen = int(config.redis.get(f"last_seen_{keyword}") or 0)
 	return lastSeen if raw else datetime_from_timestamp(lastSeen)
 
 def set_last_seen(keyword, seen):
-	config.state.set(f"last_seen_{keyword}", seen)
+	config.redis.set(f"last_seen_{keyword}", str(int(seen)))
+
+def is_processed(id, prefix="processed_comment_"):
+	return config.redis.exists(f"{prefix}{id}")
+
+def set_processed(id, prefix="processed_comment_"):
+	config.redis.set(f"{prefix}{id}", 1)

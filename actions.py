@@ -3,8 +3,7 @@ import config
 import utils
 import re
 import praw
-import threading 
-from rq import Queue as RQ
+import threading
 from datetime import datetime
 from datetime import timedelta
 from durations import Duration
@@ -32,6 +31,10 @@ def parseCommandText(body):
 		return False
 
 def processComment(comment):
+	if utils.is_processed(comment.id):
+		logging.debug(f"Skipping already processed comment: {comment}")
+		return;
+
 	result = parseCommandText(comment.body)
 	if result:
 		(bot, user, words, withLinks) = result
@@ -39,15 +42,14 @@ def processComment(comment):
 		thread.start()
 
 def processSummoning(comment, user, words, withLinks = False):
-	print(comment, user, words)
-	state = config.state
+	state = config.redis
 	inflight = f"inflight_{comment.id}"
 
 	if state.get(inflight):
-		logging.debug(f"Skipping already inflight comment from processing: {comment.id}")
+		print(f"Skipping already inflight comment from processing: {comment.id}")
 		return;
 
-	state.set(inflight, True)
+	state.set(inflight, 1)
 	print(f"Processing summoning by u/{comment.author}: {comment.body}")
 
 	user = user or comment.parent().author.name
@@ -57,9 +59,9 @@ def processSummoning(comment, user, words, withLinks = False):
 			return
 
 		(count, countNR, links, cIds) = analyzeUser(user, words, comment, withLinks)
-		replyToComment(comment, user, words, count, countNR, links, cIds)
+		sendCounterComment(comment, user, words, count, countNR, links, cIds)
 
-	state.rem(inflight)
+	state.delete(inflight)
 
 def processMessage(message):
 	result = parseCommandText(message.body)
@@ -70,7 +72,7 @@ def processMessage(message):
 				print(f"Skipping blacklisted user {user}")
 				return
 			(count, countNR, links, cIds) = analyzeUser(user, words, withLinks = withLinks)
-			replyToMessage(message, user, words, count, countNR, links, cIds)
+			sendCounterMessage(user, words, count, countNR, links, cIds, message=message)
 		else:
 			logging.debug("Message didn't have a target body, skipping.")
 
@@ -123,7 +125,7 @@ def countTextForWords(words, text):
 	pattern = r"({q})".format(q='|'.join(words))
 	return len(re.findall(pattern, text.lower()))
 
-def replyToComment(comment, user, words, count, countNR, links = [], commentIds = []):
+def sendCounterComment(comment, user, words, count, countNR, links = [], commentIds = []):
 	saveCount(comment, user, words, count, countNR)
 
 	replyText = utils.buildCounterReply(user, words, count, countNR);
@@ -136,24 +138,17 @@ def replyToComment(comment, user, words, count, countNR, links = [], commentIds 
 
 	print(f"Will try to comment to reply with: {replyText}")
 	try:
-		post = comment.submission
-		if post and (post.locked or post.archived):
-			print("Post is locked or archived")
 		reply = comment.reply(replyText)
-		print(f"Successfully replied: {utils.linkify(reply)}")
-	except praw.exceptions.RedditAPIException as e:
-		for error in e.items:
-			match = re.search(r"(try again in )([0-9a-zA-z ]{1,15})\.", error.message)
-			if match and match.group(2):
-				duration = Duration(match.group(2)).to_seconds()
-				print(f"Couldn't reply because of rate limit so scheduled it to reply in {duration} seconds")
-				rq = RQ(connection=utils.redis())
-				rq.enqueue_in(timedelta(seconds=duration), replyToComment, comment, user, words, count, countNR)
+		print(f"Successfully replied with a comment: {utils.linkify(reply)}")
+		utils.set_processed(comment.id)
 	except Exception as e:
-		# todo: maybe send it to the author of the comment?
-		print(f"Couldn't recover from error: {e}")
+		print(f"Couldn't send counter reply with a comment so will try to send a message instead: {e}")
+		sendCounterMessage(user, words, count, countNR, links, commentIds, comment=comment)
 
-def replyToMessage(message, user, words, count, countNR, links = [], commentIds = []):
+def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [], message = None, comment = None):
+	if not (message or comment):
+		raise ValueError("Can't send a message without message or comment")
+
 	replyText = utils.buildCounterReply(user, words, count, countNR);
 	if commentIds or links:
 		replyText += f"\n\nLinks:"
@@ -164,10 +159,16 @@ def replyToMessage(message, user, words, count, countNR, links = [], commentIds 
 
 	print(f"Will try to message to u/{user} with: {replyText}")
 	try:
-		reply = message.reply(replyText)
-		print(f"Successfully replied to message: {reply}")
+		if message:
+			reply = message.reply(replyText)
+		elif comment:
+			replyPrefix = f"{utils.linkify(comment.context)}\n\n" if hasattr(comment, 'context') else None
+			if replyPrefix:
+				replyText = replyPrefix + replyText
+			reply = config.reddit.redditor(user).message(config.BOTNAME, replyText)
+			utils.set_processed(comment.id)
+		print(f"Successfully sent counter message")
 	except Exception as e:
-		# todo: maybe send it to the author of the comment?
 		print(f"Error sending the message: {e}")
 
 def processCommentWithCheck(comment):
@@ -175,7 +176,7 @@ def processCommentWithCheck(comment):
 	alreadyReplied = False
 	for c in comment.replies:
 		if c.author == config.BOTNAME:
-			loggind.debug(f"Already replied to comment {comment.id} with comment {utils.linkify(c)}")
+			logging.debug(f"Already replied to comment {comment.id} with comment {utils.linkify(c)}")
 			alreadyReplied = True
 			break
 	if not alreadyReplied:

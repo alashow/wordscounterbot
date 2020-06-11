@@ -3,6 +3,7 @@ from dotenv import load_dotenv, find_dotenv
 from psaw import PushshiftAPI
 import praw
 import pickledb
+from redis import StrictRedis
 
 def env(key, fallback):
 	return os.getenv(key, fallback)
@@ -38,4 +39,4 @@ api = PushshiftAPI()
 apiReddit = PushshiftAPI(reddit)
 
 db = pickledb.load('data/stats.db', False)
-state = pickledb.load('data/app.db', True)
+redis = StrictRedis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, db=0, decode_responses=True)
