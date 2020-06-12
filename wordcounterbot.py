@@ -7,17 +7,9 @@ import threading
 from datetime import datetime
 import utils
 import logging
+import logging.config
 import time
 from praw.models import Comment
-
-handler = logging.StreamHandler()
-# logging.basicConfig(level=logging.DEBUG)
-
-@utils.background
-def initStreamListener(workers=100):
-	pool = ThreadPoolExecutor(max_workers=workers)
-	for comment in config.sub.stream.comments(skip_existing=False):
-		pool.submit(actions.processComment, (comment))
 
 def checkUnreadMessages(workers=10):
 	lastSeenKey = "messages"
@@ -26,7 +18,7 @@ def checkUnreadMessages(workers=10):
 	
 	inbox = config.reddit.inbox
 	pool = ThreadPoolExecutor(max_workers=workers)
-	messages = list(inbox.unread(limit=25))
+	messages = list(inbox.unread(limit=None))
 
 	for item in messages:
 		isComment = isinstance(item, Comment)
@@ -36,21 +28,16 @@ def checkUnreadMessages(workers=10):
 			break;
 
 		if createdAt > lastMessageAt:
-			print(f"Found new last message: {utils.datetime_from_timestamp(createdAt)}")
+			logging.info(f"Found new last message: {utils.datetime_from_timestamp(createdAt)}")
 			lastMessageAt = createdAt;
-		
-		print(f"Processing message by u/{item.author}: {item.body}, at={createdAt}, comment={isComment}")
+
 		if item.new:
-			pool.submit(actions.processComment if isComment else actions.processMessage, (item))
+			logging.info(f"Sending unread item to be processed: itemCreatedAt={createdAt}")
+			pool.submit(actions.processUnreadItem, (item))
 	
 	if messages:
 		utils.set_last_seen(lastSeenKey, lastMessageAt)
 		inbox.mark_read(messages)
-
-try:
-	initStreamListener()
-except:
-	initStreamListener()
 
 while True:
 	checkUnreadMessages()

@@ -12,12 +12,25 @@ from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from classes.queue import Queue
+from praw.models import Comment
+
+from prawcore import Forbidden
+from prawcore import NotFound
 
 def isTargetBlacklisted(user):
 	return user.lower() in config.TARGET_USER_BLACKLIST
 
 def isCallerBlacklisted(user):
 	return user.lower() in config.CALLER_USER_BLACKLIST
+
+def processUnreadItem(item):
+	isComment = isinstance(item, Comment)
+	logging.info(f"Processing unread message by u/{item.author}: {item.body}, comment={isComment}")
+
+	try:
+		result = processComment(item) if isComment else processMessage(item)
+	except Exception as e:
+		logging.info(f"Failed to process unread message: {e}")
 
 # returns False if no match or (botname, username, words, withLinks)
 def parseCommandText(body):
@@ -35,7 +48,7 @@ def parseCommandText(body):
 
 def processComment(comment):
 	if utils.is_processed(comment.id):
-		logging.debug(f"Skipping already processed comment: {comment}")
+		logging.info(f"Skipping already processed comment: {comment}")
 		return;
 
 	result = parseCommandText(comment.body)
@@ -46,35 +59,42 @@ def processComment(comment):
 def processSummoning(comment, bot, user, words, withLinks = False):
 	caller = comment.author.name
 	if isCallerBlacklisted(caller):
-		print(f"Skipping blacklisted caller user: u/{caller}")
+		logging.info(f"Skipping blacklisted caller user: u/{caller}")
 		return
 
 	state = config.redis
 	inflight = f"inflight_{comment.id}"
 
 	if state.get(inflight):
-		print(f"Skipping already inflight comment from processing: {comment.id}")
+		logging.info(f"Skipping already inflight comment from processing: {comment.id}")
 		return;
 
-	state.set(inflight, 1)
-	print(f"Processing summoning by u/{comment.author}: {comment.body}")
+	logging.info(f"Processing summoning by u/{comment.author}: {comment.body}")
 
+	if not user and not comment.parent().author:
+		logging.info(f"Skipping a comment without target user and probably deleted parent comment: {comment.id}")
+		return
 	user = user or comment.parent().author.name
+
+	state.set(inflight, 1)
 	if user:
 		if isTargetBlacklisted(user):
 			if user == bot and bot == config.BOTNAME:
 				try:
 					comment.reply(config.COUNTER_REPLY_NO_SNITCHING_ON_ME)
-					logging.debug("Sent no snitching on me reply.")
+					logging.info("Sent no snitching on me reply.")
 				except Exception as e:
-					logging.debug(f"Couldn't send no snitching on me reply. Oh well. Error: {e}")
+					logging.info(f"Couldn't send no snitching on me reply. Oh well. Error: {e}")
 
-			print(f"Skipping blacklisted target user: u/{user}")
+			logging.info(f"Skipping blacklisted target user: u/{user}")
 			state.delete(inflight)
 			return
 
-		(count, countNR, links, cIds) = analyzeUser(user, words, comment, withLinks)
-		sendCounterComment(comment, user, words, count, countNR, links, cIds)
+		try:
+			result = analyzeUser(user, words, comment, withLinks)
+			sendCounterComment(comment, user, words, *result)
+		except Exception as e:
+			print(f"Failed to finish processing summoning comment: {e}")
 
 	state.delete(inflight)
 
@@ -83,23 +103,28 @@ def processMessage(message):
 	if result:
 		(bot, user, words, withLinks) = result
 		if user:
-			if isUserBlacklisted(user):
-				print(f"Skipping blacklisted user {user}")
+			if isTargetBlacklisted(user):
+				logging.info(f"Skipping blacklisted user {user}")
 				return
-			(count, countNR, links, cIds) = analyzeUser(user, words, withLinks = withLinks)
-			sendCounterMessage(user, words, count, countNR, links, cIds, message=message)
+			result = analyzeUser(user, words, withLinks = withLinks)
+			sendCounterMessage(user, words, *result, message=message)
 		else:
-			logging.debug("Message didn't have a target body, skipping.")
+			logging.info("Message didn't have a target body, skipping.")
 
 def analyzeUser(user, words=config.N_WORDS, comment = None, withLinks = False):
-	print(f"Analyzing user u/{user} for word(s): {', '.join(words)}")
+	logging.info(f"Analyzing user u/{user} for word(s): {', '.join(words)}")
 
 	isNwords = words == config.N_WORDS
+	recentComments = []
+	try:
+		recentComments = list(config.reddit.redditor(user).comments.new())
+	except Forbidden as e:
+		logging.info(f"Unauthorized to fetch recent comments, user was probably suspended from Reddit: {e}")
+
 	submissions = getUserPosts(user)
-	recentComments = list(config.reddit.redditor(user).comments.new())
 	comments = list(config.api.search_comments(author=user, filter=['body', 'id', 'permalink'], q="|".join(words), size=1000))
 
-	print(f"Found {len(comments)} comments for u/{user}")
+	logging.info(f"Found {len(comments)} comments for u/{user} from pushshift and {len(recentComments)} recent comments.")
 
 	totalMatches = 0
 	totalNRMatches = 0
@@ -130,7 +155,7 @@ def analyzeUser(user, words=config.N_WORDS, comment = None, withLinks = False):
 		if isNwords:
 			totalNRMatches += countTextForWords(words[2:], c.body) if(hasattr(c, 'body')) else 0
 
-	print(f"Finished analyzing user u/{user}, results: {totalMatches}, {totalNRMatches}")
+	logging.info(f"Finished analyzing user u/{user}, results: {totalMatches}, {totalNRMatches}")
 	
 	links = list(map(lambda x: utils.linkify(x), links))
 
@@ -141,7 +166,7 @@ def countTextForWords(words, text):
 	return len(re.findall(pattern, text.lower()))
 
 def sendCounterComment(comment, user, words, count, countNR, links = [], commentIds = []):
-	saveCount(comment, user, words, count, countNR)
+	saveCount(user, words, count, countNR, comment)
 
 	replyText = utils.buildCounterReply(user, words, count, countNR);
 	if commentIds or links:
@@ -151,19 +176,21 @@ def sendCounterComment(comment, user, words, count, countNR, links = [], comment
 		if links:
 			replyText += f"\n\n{utils.prettyLinks(links)}"
 
-	print(f"Will try to comment to reply with: {replyText}")
+	logging.info(f"Will try to comment to reply with: {replyText}")
 	try:
 		reply = comment.reply(replyText)
-		print(f"Successfully replied with a comment: {utils.linkify(reply)}")
+		logging.info(f"Successfully replied with a comment: {utils.linkify(reply)}")
 		utils.set_processed(comment.id)
 	except Exception as e:
-		print(f"Couldn't send counter reply with a comment so will try to send a message instead: {e}")
+		logging.info(f"Couldn't send counter reply with a comment so will try to send a message instead: {e}")
 		sendCounterMessage(user, words, count, countNR, links, commentIds, comment=comment)
 
 def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [], message = None, comment = None):
 	if not (message or comment):
 		raise ValueError("Can't send a message without message or comment")
 
+	saveCount(user, words, count, countNR, comment, message)
+
 	replyText = utils.buildCounterReply(user, words, count, countNR);
 	if commentIds or links:
 		replyText += f"\n\nLinks:"
@@ -172,7 +199,7 @@ def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [],
 		if links:
 			replyText += f"\n\n{utils.prettyLinks(links)}"
 
-	print(f"Will try to message to u/{user} with: {replyText}")
+	logging.info(f"Will try to message to u/{user} with: {replyText}")
 	try:
 		if message:
 			reply = message.reply(replyText)
@@ -182,24 +209,24 @@ def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [],
 				replyText = replyPrefix + replyText
 			reply = config.reddit.redditor(user).message(config.BOTNAME, replyText)
 			utils.set_processed(comment.id)
-		print(f"Successfully sent counter message")
+		logging.info(f"Successfully sent counter message")
 	except Exception as e:
-		print(f"Error sending the message: {e}")
+		logging.info(f"Error sending the message: {e}")
 
 def processCommentWithCheck(comment):
 	comment.refresh()
 	alreadyReplied = False
 	for c in comment.replies:
 		if c.author == config.BOTNAME:
-			logging.debug(f"Already replied to comment {comment.id} with comment {utils.linkify(c)}")
+			logging.info(f"Already replied to comment {comment.id} with comment {utils.linkify(c)}")
 			alreadyReplied = True
 			break
 	if not alreadyReplied:
-		print(f"Will process comment by '{comment.author}': {comment.body}, {utils.linkify(comment)}")
+		logging.info(f"Will process comment by '{comment.author}': {comment.body}, {utils.linkify(comment)}")
 		processComment(comment)
 		return True
 	else:
-		logging.debug(f"Skipping already processed comment: {utils.linkify(comment)}" )
+		logging.info(f"Skipping already processed comment: {utils.linkify(comment)}" )
 		return False
 
 def processCommentById(id):
@@ -207,7 +234,7 @@ def processCommentById(id):
 
 def processPostComments(post=None, id=None, workers=10):
 	if post and (post.locked or post.archived):
-		print("Post is locked or archived, skipping")
+		logging.info("Post is locked or archived, skipping")
 		return
 
 	comments = getPostComments(post=post) if post else getPostComments(id=id)
@@ -243,14 +270,14 @@ def getUserComments(user, fields=['body']):
 	return recentComments+comments
 
 def getUserPosts(user, fields=['id', 'title', 'selftext', 'permalink']):
-	return list(config.api.search_submissions(author=user, filter=fields, size=500))
+	return list(config.api.search_submissions(author=user, filter=fields, size=1000))
 
 def getSaveKey(user, words):
 	return f"{user}.{b64encode(str(words).encode('utf-8')).decode('utf-8')}"
 
 @background
-def saveCount(comment, user, words, count, countNR):
+def saveCount(user, words, count, countNR, comment = None, message = None):
 	key = getSaveKey(user, words)
 	config.db.set(key, {"count": count, "countNR": countNR})
 	config.db.dump()
-	print(f"Saved count for: {key}")
+	logging.info(f"Saved count for: {key}")

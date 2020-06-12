@@ -1,8 +1,9 @@
+import logging_config
 import os
-from dotenv import load_dotenv, find_dotenv
-from psaw import PushshiftAPI
 import praw
 import pickledb
+from dotenv import load_dotenv, find_dotenv
+from psaw import PushshiftAPI
 from redis import StrictRedis
 
 def env(key, fallback):
