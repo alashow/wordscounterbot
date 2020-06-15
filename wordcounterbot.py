@@ -40,5 +40,8 @@ def checkUnreadMessages(workers=10):
 		inbox.mark_read(messages)
 
 while True:
-	checkUnreadMessages()
-	time.sleep(5)
+	try:
+		checkUnreadMessages()
+		time.sleep(5)
+	except Exception as e:
+		logging.info(f"Caught exception while checking unread messages: {e}")

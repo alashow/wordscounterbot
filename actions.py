@@ -35,7 +35,7 @@ def processUnreadItem(item):
 # returns False if no match or (botname, username, words, withLinks)
 def parseCommandText(body):
 	text = utils.markdownToText(body)
-	match = re.search(config.COMMAND_PATTERN, text)
+	match = re.search(config.COMMAND_PATTERN, text, flags=re.IGNORECASE)
 
 	if match and match.group(1):
 		words = match.group(5)
@@ -149,9 +149,8 @@ def analyzeUser(user, words=config.N_WORDS, comment = None, withLinks = False):
 		totalMatches += count
 		if count > 0:
 			commentIds.append(c.id)
-			if withLinks:
-				if hasattr(c, 'permalink'):
-					links.append(c.permalink)
+			if withLinks and hasattr(c, 'permalink'):
+				links.append(c.permalink)
 		if isNwords:
 			totalNRMatches += countTextForWords(words[2:], c.body) if(hasattr(c, 'body')) else 0
 
@@ -163,7 +162,7 @@ def analyzeUser(user, words=config.N_WORDS, comment = None, withLinks = False):
 
 def countTextForWords(words, text):
 	pattern = r"({q})".format(q='|'.join(words))
-	return len(re.findall(pattern, text.lower()))
+	return len(re.findall(pattern, text.lower(), flags=re.IGNORECASE))
 
 def sendCounterComment(comment, user, words, count, countNR, links = [], commentIds = []):
 	saveCount(user, words, count, countNR, comment)
@@ -207,7 +206,7 @@ def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [],
 			replyPrefix = f"{utils.linkify(comment.context)}\n\n" if hasattr(comment, 'context') else None
 			if replyPrefix:
 				replyText = replyPrefix + replyText
-			reply = config.reddit.redditor(user).message(config.BOTNAME, replyText)
+			reply = comment.author.message(config.BOTNAME, replyText)
 			utils.set_processed(comment.id)
 		logging.info(f"Successfully sent counter message")
 	except Exception as e:
