@@ -3,6 +3,7 @@ deploy.sh
 
 data/stats.db
 data/app.db
+data/auto_bans.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -2,6 +2,7 @@ deploy.sh
 
 data/stats.db
 data/app.db
+data/auto_bans.txt
 
 .env
 .git*

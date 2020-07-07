@@ -1,4 +1,5 @@
 import config
+import logging_config
 import logging
 from datetime import timedelta
 from functools import reduce

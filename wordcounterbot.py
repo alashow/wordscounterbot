@@ -5,6 +5,7 @@ from threading import Thread
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from datetime import datetime
+from datetime import datetime
 import utils
 import logging
 import logging.config
@@ -39,9 +40,14 @@ def checkUnreadMessages(workers=10):
 		utils.set_last_seen(lastSeenKey, lastMessageAt)
 		inbox.mark_read(messages)
 
-while True:
-	try:
-		checkUnreadMessages()
-		time.sleep(5)
-	except Exception as e:
-		logging.info(f"Caught exception while checking unread messages: {e}")
+	return pool
+
+# while True:
+# 	try:
+# 		checkUnreadMessages()
+# 		time.sleep(5)
+# 	except Exception as e:
+# 		logging.info(f"Caught exception while checking unread messages: {e}")
+
+executor = checkUnreadMessages()
+executor.shutdown(wait=True)

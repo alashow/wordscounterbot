@@ -4,6 +4,7 @@ import utils
 import re
 import praw
 import threading
+from logging_config import tgLogger
 from datetime import datetime
 from datetime import timedelta
 from durations import Duration
@@ -53,8 +54,7 @@ def processComment(comment):
 
 	result = parseCommandText(comment.body)
 	if result:
-		thread = threading.Thread(target=processSummoning, args=[comment, *result])
-		thread.start()
+		processSummoning(comment, *result)
 
 def processSummoning(comment, bot, user, words, withLinks = False):
 	caller = comment.author.name
@@ -92,6 +92,7 @@ def processSummoning(comment, bot, user, words, withLinks = False):
 
 		try:
 			result = analyzeUser(user, words, comment, withLinks)
+			banIfNeeded(caller, user, words, result)
 			sendCounterComment(comment, user, words, *result)
 		except Exception as e:
 			print(f"Failed to finish processing summoning comment: {e}")
@@ -99,6 +100,11 @@ def processSummoning(comment, bot, user, words, withLinks = False):
 	state.delete(inflight)
 
 def processMessage(message):
+	caller = message.author.name
+	if isCallerBlacklisted(caller):
+		logging.info(f"Skipping blacklisted caller user: u/{caller}")
+		return
+
 	result = parseCommandText(message.body)
 	if result:
 		(bot, user, words, withLinks) = result
@@ -107,6 +113,7 @@ def processMessage(message):
 				logging.info(f"Skipping blacklisted user {user}")
 				return
 			result = analyzeUser(user, words, withLinks = withLinks)
+			banIfNeeded(caller, user, words, result)
 			sendCounterMessage(user, words, *result, message=message)
 		else:
 			logging.info("Message didn't have a target body, skipping.")
@@ -136,7 +143,6 @@ def analyzeUser(user, words=config.N_WORDS, comment = None, withLinks = False):
 			links.append(s.permalink)
 		if isNwords:
 			totalNRMatches += countTextForWords(words[2:], s.title) + countTextForWords(words[2:], s.selftext) if(hasattr(s, 'selftext')) else 0
-	
 	processedComments = []
 	commentsWithoutLinks = []
 	commentIds = []
@@ -273,6 +279,14 @@ def getUserPosts(user, fields=['id', 'title', 'selftext', 'permalink']):
 
 def getSaveKey(user, words):
 	return f"{user}.{b64encode(str(words).encode('utf-8')).decode('utf-8')}"
+
+def banIfNeeded(caller, user, words, result):
+	(count,countNR,links,cIds) = result
+	if count > 1000:
+			if caller == user:
+				tgLogger.info(f"Auto banning user: https://reddit.com/u/{caller}, ({count}, {countNR})")
+				with open("data/auto_bans.txt", "a+") as file:
+					file.write(f"{caller.lower()}\n")
 
 @background
 def saveCount(user, words, count, countNR, comment = None, message = None):

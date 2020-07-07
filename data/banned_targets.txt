@@ -3,3 +3,5 @@ none
 n_word_pass_enabled
 wordscounterbot
 rascaltech
+itsPotatoLord
+antkaren
