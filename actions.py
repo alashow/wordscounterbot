@@ -204,7 +204,7 @@ def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [],
 		if links:
 			replyText += f"\n\n{utils.prettyLinks(links)}"
 
-	logging.info(f"Will try to message to u/{user} with: {replyText}")
+	logging.info(f"Will try to message to u/{message.author.name} with: {replyText}")
 	try:
 		if message:
 			reply = message.reply(replyText)
@@ -277,9 +277,6 @@ def getUserComments(user, fields=['body']):
 def getUserPosts(user, fields=['id', 'title', 'selftext', 'permalink']):
 	return list(config.api.search_submissions(author=user, filter=fields, size=1000))
 
-def getSaveKey(user, words):
-	return f"{user}.{b64encode(str(words).encode('utf-8')).decode('utf-8')}"
-
 def banIfNeeded(caller, user, words, result):
 	(count,countNR,links,cIds) = result
 	if count > 1000:
@@ -290,7 +287,7 @@ def banIfNeeded(caller, user, words, result):
 
 @background
 def saveCount(user, words, count, countNR, comment = None, message = None):
-	key = getSaveKey(user, words)
-	config.db.set(key, {"count": count, "countNR": countNR})
-	config.db.dump()
-	logging.info(f"Saved count for: {key}")
+	wordsTableEncoded = f"{b64encode(str(words).encode('utf-8')).decode('utf-8')}"
+	stats = config.db.table(wordsTableEncoded)
+	stats.insert({"user": user, "count": count, "countNR": countNR, "timestamp": utils.timestamp()})
+	logging.info(f"Saved stats count for {user} and using words {words}")

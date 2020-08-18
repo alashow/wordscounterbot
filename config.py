@@ -1,6 +1,6 @@
 import os
 import praw
-import pickledb
+from tinydb import TinyDB
 from dotenv import load_dotenv, find_dotenv
 from psaw import PushshiftAPI
 from redis import StrictRedis
@@ -40,5 +40,5 @@ sub = reddit.subreddit(SUBREDDIT)
 api = PushshiftAPI()
 apiReddit = PushshiftAPI(reddit)
 
-db = pickledb.load('data/stats.db', False)
+db = TinyDB('data/stats.db')
 redis = StrictRedis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, db=0, decode_responses=True)

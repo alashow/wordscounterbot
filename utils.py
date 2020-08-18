@@ -2,6 +2,7 @@ import config
 import logging_config
 import logging
 from datetime import timedelta
+from datetime import datetime
 from functools import reduce
 from bs4 import BeautifulSoup
 from markdown import markdown
@@ -125,3 +126,6 @@ def setup_proxy(botname):
 		os.environ['HTTP_PROXY'] = proxy
 		os.environ['https_proxy'] = proxy
 		os.environ['HTTPS_PROXY'] = proxy
+
+def timestamp():
+	return datetime.now().strftime('%Y-%m-%d %H:%M:%S')

@@ -45,6 +45,7 @@ def checkUnreadMessages(workers=10):
 	return pool
 
 # while True:
+# 	logging.info(f"Checking for unread messages forever forever forever")
 # 	try:
 # 		checkUnreadMessages()
 # 		time.sleep(5)
