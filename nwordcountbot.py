@@ -7,14 +7,7 @@ import threading
 import utils
 from reddit_utils import RedditKeywordWatcher
 
-# import logging
-
-# handler = logging.StreamHandler()
-# handler.setLevel(logging.DEBUG)
-# for logger_name in ("praw", "prawcore"):
-#     logger = logging.getLogger(logger_name)
-#     logger.setLevel(logging.DEBUG)
-#     logger.addHandler(handler)
+utils.setup_proxy("nwordcountbot")
 
 pool = ThreadPoolExecutor(max_workers=20)
 

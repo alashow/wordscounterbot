@@ -9,6 +9,7 @@ import threading
 import pytz
 from datetime import datetime
 import random
+import os
 
 def buildCounterReply(user, words, count, countNR):
 	isNwords = words == config.N_WORDS
@@ -115,3 +116,12 @@ def is_processed(id, prefix="processed_comment_"):
 
 def set_processed(id, prefix="processed_comment_"):
 	config.redis.set(f"{prefix}{id}", 1)
+
+def setup_proxy(botname):
+	proxy = config.env(f"{botname}_proxy", None)
+	if proxy:
+		logging.info(f"Using {botname} with proxy: {proxy}")
+		os.environ['http_proxy'] = proxy 
+		os.environ['HTTP_PROXY'] = proxy
+		os.environ['https_proxy'] = proxy
+		os.environ['HTTPS_PROXY'] = proxy

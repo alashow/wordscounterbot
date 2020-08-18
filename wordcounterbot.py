@@ -12,6 +12,8 @@ import logging.config
 import time
 from praw.models import Comment
 
+utils.setup_proxy("wordscounterbot")
+
 def checkUnreadMessages(workers=10):
 	lastSeenKey = "messages"
 	lastSeen = utils.get_last_seen(lastSeenKey)
