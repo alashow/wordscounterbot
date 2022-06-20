@@ -40,6 +40,14 @@ def redditShortLink(id):
 def apiCommentsJsonLink(ids):
 	return "http://api.pushshift.io/reddit/search/comment/?ids=" + ",".join(ids) 
 
+def redditCommentsJsonLink(id):
+	return f"https://www.reddit.com/api/info.json/comment/?ids=t1_{id}"
+
+
+def socialgrepLink(id):
+	return f"https://socialgrep.com/search?query=comment%253A{id}"
+
+
 def prettyLinks(links, offset=1, maxLength=5000):
 	if maxLength > 0:
 		random.shuffle(links)

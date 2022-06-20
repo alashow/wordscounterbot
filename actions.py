@@ -170,15 +170,18 @@ def countTextForWords(words, text):
 	pattern = r"({q})".format(q='|'.join(words))
 	return len(re.findall(pattern, text.lower(), flags=re.IGNORECASE))
 
-def sendCounterComment(comment, user, words, count, countNR, links = [], commentIds = []):
+def sendCounterComment(comment, user, words, count, countNR, links = [], commentIds = [], maxLength=5):
 	saveCount(user, words, count, countNR, comment)
 
 	replyText = utils.buildCounterReply(user, words, count, countNR);
 	if commentIds or links:
-		replyText += f"\n\nLinks:"
 		if commentIds:
-			replyText += f"\n\n0: [Pushshift]({utils.apiCommentsJsonLink(commentIds)})"
+			replyText += f"\n\nHere are the {len(commentIds)} latest mentions:"
+			commentIds = commentIds[:maxLength]
+			for no, commentId in enumerate(commentIds):
+				replyText += f"\n\n{no+1}: [Reddit]({utils.redditCommentsJsonLink(commentId)}) / [Pushshift]({utils.apiCommentsJsonLink([commentId])}) / [SocialGrep]({utils.socialgrepLink(commentId)})"
 		if links:
+			replyText += f"\n\nLinks:"
 			replyText += f"\n\n{utils.prettyLinks(links)}"
 
 	logging.info(f"Will try to comment to reply with: {replyText}")
@@ -190,7 +193,7 @@ def sendCounterComment(comment, user, words, count, countNR, links = [], comment
 		logging.info(f"Couldn't send counter reply with a comment so will try to send a message instead: {e}")
 		sendCounterMessage(user, words, count, countNR, links, commentIds, comment=comment)
 
-def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [], message = None, comment = None):
+def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [], message = None, comment = None, maxLength=5):
 	if not (message or comment):
 		raise ValueError("Can't send a message without message or comment")
 
@@ -198,10 +201,13 @@ def sendCounterMessage(user, words, count, countNR, links = [], commentIds = [],
 
 	replyText = utils.buildCounterReply(user, words, count, countNR);
 	if commentIds or links:
-		replyText += f"\n\nLinks:"
 		if commentIds:
-			replyText += f"\n\n0: [Pushshift]({utils.apiCommentsJsonLink(commentIds)})"
+			replyText += f"\n\nHere are the {len(commentIds)} latest mentions:"
+			commentIds = commentIds[:maxLength]
+			for no, commentId in enumerate(commentIds):
+				replyText += f"\n\n{no+1}: [Reddit]({utils.redditCommentsJsonLink(commentId)}) / [Pushshift]({utils.apiCommentsJsonLink([commentId])}) / [SocialGrep]({utils.socialgrepLink(commentId)})"
 		if links:
+			replyText += f"\n\nLinks:"
 			replyText += f"\n\n{utils.prettyLinks(links)}"
 
 	logging.info(f"Will try to message to u/{message.author.name} with: {replyText}")
